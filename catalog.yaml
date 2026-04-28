@@ -1,0 +1,159 @@
+# reflect-mcp catalog entries.
+#
+# Three flavours of the same debug server, useful for verifying obot/nanobot
+# wiring across all the MCP runtimes:
+#   - npx          (single-user, instance-per-user, stdio transport)
+#   - containerized (multi-user, HTTP transport, runs from a GHCR image)
+#   - remote       (multi-user, HTTP transport, hosted at reflect.scrat.hale.sh)
+#
+# The single tool, `echo`, returns:
+#   - process.argv (verifies how nanobot/obot constructs the command line)
+#   - process.env  (verifies env-var propagation, including secret bindings)
+#   - request headers (HTTP transports only — verifies header propagation,
+#                      header secret bindings, prefixing, etc.)
+
+- name: Reflect NPX
+  shortDescription: Debug MCP server — npx single-user runtime (stdio)
+  description: |
+    Reflect MCP server (npx variant). Spawned per user as a stdio child of
+    nanobot. The single tool, `echo`, returns:
+
+      - the command and args this server was launched with (process.argv)
+      - the environment variables visible to the process
+      - request headers (always null on this variant — stdio has no headers)
+
+    Useful for verifying that env vars configured on the catalog entry — and
+    env vars wired via Kubernetes Secret bindings — actually reach the
+    spawned npx child.
+  metadata:
+    categories: Developer Tools
+  icon: https://avatars.githubusercontent.com/u/4175918?v=4
+  repoURL: https://github.com/njhale/mcp-zoo
+  runtime: npx
+  npxConfig:
+    package: reflect-mcp
+    # The first three args drive the server. Anything after is arbitrary —
+    # reflect-mcp passes it through unchanged and surfaces it via
+    # `echo`'s `argv` and `extraArgs` fields, so you can verify exactly
+    # how nanobot/obot construct argv for npx-launched servers.
+    args:
+      - --transport
+      - stdio
+      - --reflect-tag=npx-single-user
+      - hello-from-catalog
+  env:
+    - key: REFLECT_TEST_VALUE
+      name: Reflect Test Value
+      description: Plain test env var — round-tripped via the `echo` tool's `env` field.
+      required: false
+      sensitive: false
+    - key: REFLECT_TEST_SECRET
+      name: Reflect Test Secret
+      description: Sensitive test env var — verifies sensitive value propagation end-to-end.
+      required: false
+      sensitive: true
+  toolPreview:
+    - name: echo
+      description: Returns argv, env, cwd, pid, transport, and (for HTTP) request headers.
+      params: {}
+
+- name: Reflect Containerized
+  shortDescription: Debug MCP server — containerized runtime (HTTP)
+  description: |
+    Reflect MCP server (containerized variant). Runs from the prebuilt image
+    `ghcr.io/njhale/mcp-zoo/reflect-mcp:main` and serves the streamable HTTP
+    transport on port 8099 at `/mcp`. The `echo` tool returns:
+
+      - the command and args the container was started with
+      - the environment variables visible to the process (including k8s
+        Secret-projected vars when secret bindings are used)
+      - the headers of the inbound HTTP request (the headers nanobot has
+        synthesized for the upstream call)
+
+    Useful for verifying full container-runtime wiring: env-var bindings,
+    HTTP transport configuration, and header propagation through nanobot.
+  metadata:
+    categories: Developer Tools
+    allow-multiple: "true"
+  icon: https://avatars.githubusercontent.com/u/4175918?v=4
+  repoURL: https://github.com/njhale/mcp-zoo
+  runtime: containerized
+  containerizedConfig:
+    image: ghcr.io/njhale/mcp-zoo/reflect-mcp:main
+    port: 8099
+    path: /mcp
+    # Real flags first, then arbitrary pass-through args that show up in the
+    # `echo` tool's `argv` / `extraArgs` fields — confirms how nanobot/obot
+    # propagate args for containerized runtimes.
+    args:
+      - --transport
+      - http-streamable
+      - --port
+      - "8099"
+      - --path
+      - /mcp
+      - --reflect-tag=containerized
+      - hello-from-catalog
+  env:
+    - key: REFLECT_TEST_VALUE
+      name: Reflect Test Value
+      description: Plain test env var — round-tripped via the `echo` tool's `env` field.
+      required: false
+      sensitive: false
+    - key: REFLECT_TEST_SECRET
+      name: Reflect Test Secret
+      description: Sensitive test env var — verifies sensitive value propagation end-to-end.
+      required: false
+      sensitive: true
+  toolPreview:
+    - name: echo
+      description: Returns argv, env, cwd, pid, transport, and the inbound HTTP request headers.
+      params: {}
+
+- name: Reflect Remote
+  shortDescription: Debug MCP server — remote runtime (HTTP, hosted)
+  description: |
+    Reflect MCP server (remote variant). Points at the hosted instance at
+    `https://reflect.hale.sh/mcp`. Nanobot acts as the proxy and
+    forwards each MCP request — synthesizing the configured headers — to the
+    remote URL. The `echo` tool returns:
+
+      - the command and args the remote process was launched with
+      - the environment of the remote process
+      - the headers nanobot sent to the remote (so you can confirm that
+        static headers, user-supplied headers, and headers backed by
+        Kubernetes Secret bindings are all propagated correctly)
+
+    The two test headers below let you validate static-value and
+    user-supplied-sensitive-value paths without needing real credentials.
+  metadata:
+    categories: Developer Tools
+    allow-multiple: "true"
+  icon: https://avatars.githubusercontent.com/u/4175918?v=4
+  repoURL: https://github.com/njhale/mcp-zoo
+  runtime: remote
+  remoteConfig:
+    fixedURL: https://reflect.scrat.hale.sh/mcp
+    headers:
+      - key: X-Reflect-Test
+        name: Reflect Test Header (static)
+        description: |
+          Static header set by the catalog entry. The value is fixed and
+          baked into the catalog so every request sees the same value.
+          Useful for confirming the static-header code path.
+        value: hello-from-obot
+        required: false
+        sensitive: false
+      - key: X-Reflect-Token
+        name: Reflect Auth Token
+        description: |
+          User-supplied sensitive header. Configure a value at install time
+          (or back this with a `secretBinding` against a pre-existing
+          Kubernetes Secret) and `echo` will return it under
+          `headers["x-reflect-token"]`.
+        required: false
+        sensitive: true
+  toolPreview:
+    - name: echo
+      description: Returns argv, env, cwd, pid, transport, and the inbound HTTP request headers.
+      params: {}

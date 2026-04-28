@@ -1,0 +1,89 @@
+name: reflect-mcp npm
+
+# Publish @njhale/reflect-mcp to npmjs.org on push to main, using npm Trusted
+# Publishers (OIDC). No NPM_TOKEN secret — npm verifies the OIDC token minted
+# by GitHub Actions and issues a short-lived publish credential.
+#
+# The version published is whatever's in reflect-mcp/package.json. Bump it
+# (e.g. `npm version patch` in the reflect-mcp directory) and merge to main
+# to release. Pushing to main without bumping the version fails the publish
+# with "cannot publish over the previously published versions" — that's the
+# intended forcing function for deliberate releases.
+#
+# Setup steps on the npm side (one-time, in npmjs.com UI):
+#   1. Sign in as a user who can publish @njhale/reflect-mcp.
+#   2. Visit:  https://www.npmjs.com/package/@njhale/reflect-mcp/access
+#      (or, before the first publish, your account's "Publishing access" page
+#      and create a "Pending trusted publisher").
+#   3. Add a GitHub Actions trusted publisher with:
+#        Repository owner:   njhale
+#        Repository name:    mcp-zoo
+#        Workflow filename:  reflect-mcp-npm.yaml
+#   4. Save. From that point on this workflow can publish without any secret.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "reflect-mcp/**"
+      - ".github/workflows/reflect-mcp-npm.yaml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "If true, run `npm publish --dry-run` instead of publishing."
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write   # required to mint the OIDC token npm verifies
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reflect-mcp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
+          cache-dependency-path: "reflect-mcp/pnpm-lock.yaml"
+
+      # Trusted publishers require npm >= 11.5.1. `npm install -g` is global
+      # so cwd doesn't matter; let it inherit the job-level working-directory.
+      - name: Upgrade npm to a version that supports Trusted Publishers
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      # Sanity-check what would be uploaded — surfaces accidentally-included
+      # files (.env, src/, secrets) before they leave the runner.
+      - name: Show tarball contents
+        run: npm pack --dry-run
+
+      # Publish itself goes through `npm` directly. Trusted Publishers OIDC is
+      # well-exercised through the npm CLI; pnpm's publish path also supports
+      # it as of v10 but is less battle-tested.
+      - name: Publish to npmjs.org
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            npm publish --provenance --access public --dry-run
+          else
+            npm publish --provenance --access public
+          fi

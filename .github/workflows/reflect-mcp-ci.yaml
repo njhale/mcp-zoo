@@ -1,0 +1,53 @@
+name: reflect-mcp ci
+
+# Lint, typecheck, and build reflect-mcp on PRs and pushes to any branch.
+# Lightweight gate — does not push images, does not publish to npm.
+
+on:
+  pull_request:
+    paths:
+      - "reflect-mcp/**"
+      - ".github/workflows/reflect-mcp-ci.yaml"
+  push:
+    branches: ["**"]
+    paths:
+      - "reflect-mcp/**"
+      - ".github/workflows/reflect-mcp-ci.yaml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reflect-mcp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: "reflect-mcp/pnpm-lock.yaml"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (Biome)
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Build
+        run: pnpm run build
