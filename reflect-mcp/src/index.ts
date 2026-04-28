@@ -194,18 +194,16 @@ function announceEchoKey(): void {
 function buildServer(opts: CliOpts): McpServer {
   const server = new McpServer({
     name: "reflect-mcp",
-    version: "0.1.0",
+    version: "0.0.1",
   });
 
   server.registerTool(
-    "echo",
+    "reflect",
     {
-      title: "Echo",
+      title: "Reflect",
       description:
-        "Returns the command and args this server was launched with (including any arbitrary extras), plus process metadata. Over the streamable HTTP transport, the response also includes inbound request headers. Over stdio it instead includes the process env. Header / env values are redacted by default — pass the `key` argument (printed on stderr at server startup) to receive unredacted output. Useful for verifying secret bindings, header propagation, env-var propagation, and runtime configuration of MCP server deployments.",
+        "Returns the command and args this server was launched with (including any arbitrary extras), env, and process metadata. Over the streamable HTTP transport, the response also includes inbound request headers. Header / env values are redacted by default — pass the `key` argument (printed on stderr at server startup) to receive unredacted output. Useful for verifying secret bindings, header propagation, env-var propagation, and runtime configuration of MCP server deployments.",
       inputSchema: {
-        // SDK v1 wants a ZodRawShape (object of field → ZodType), not a
-        // wrapped z.object({...}).
         key: z
           .string()
           .optional()
@@ -226,7 +224,9 @@ function buildServer(opts: CliOpts): McpServer {
       // tool call. In stdio mode this is undefined — and stdio is the only
       // mode in which we surface process.env at all.
       const requestInfo = (
-        extra as { requestInfo?: { headers?: Record<string, string | string[]> } } | undefined
+        extra as
+          | { requestInfo?: { headers?: Record<string, string | string[]> } }
+          | undefined
       )?.requestInfo;
       const rawHeaders = requestInfo?.headers ?? null;
       const isHTTP = rawHeaders !== null;
@@ -259,15 +259,12 @@ function buildServer(opts: CliOpts): McpServer {
         receivedAt: new Date().toISOString(),
       };
 
-      // Transport-conditional fields. HTTP responses NEVER include env —
-      // anything reachable over the network is a casual exfiltration vector
-      // even when redacted (key names alone leak which credentials are
-      // present). stdio responses include env (gated by the key) but never
-      // headers (stdio has none).
+      // Transport-conditional fields.
       const result = isHTTP
         ? {
             ...common,
             headers: authorized ? rawHeaders : redactHeaders(rawHeaders),
+            env: authorized ? process.env : redactEnv(process.env),
           }
         : {
             ...common,
@@ -347,7 +344,9 @@ async function runHTTP(opts: CliOpts): Promise<void> {
   });
 
   app.listen(port, () => {
-    console.error(`reflect-mcp listening on :${port}${mcpPath} (transport: http-streamable)`);
+    console.error(
+      `reflect-mcp listening on :${port}${mcpPath} (transport: http-streamable)`,
+    );
   });
 }
 

@@ -6,7 +6,7 @@
 #   - containerized (multi-user, HTTP transport, runs from a GHCR image)
 #   - remote       (multi-user, HTTP transport, hosted at reflect.scrat.hale.sh)
 #
-# The single tool, `echo`, returns:
+# The single tool, `reflect`, returns:
 #   - process.argv (verifies how nanobot/obot constructs the command line)
 #   - process.env  (verifies env-var propagation, including secret bindings)
 #   - request headers (HTTP transports only — verifies header propagation,
@@ -16,7 +16,7 @@
   shortDescription: Debug MCP server — npx single-user runtime (stdio)
   description: |
     Reflect MCP server (npx variant). Spawned per user as a stdio child of
-    nanobot. The single tool, `echo`, returns:
+    nanobot. The single tool, `reflect`, returns:
 
       - the command and args this server was launched with (process.argv)
       - the environment variables visible to the process
@@ -34,7 +34,7 @@
     package: "@njhale/reflect-mcp"
     # The first three args drive the server. Anything after is arbitrary —
     # reflect-mcp passes it through unchanged and surfaces it via
-    # `echo`'s `argv` and `extraArgs` fields, so you can verify exactly
+    # `reflect`'s `argv` and `extraArgs` fields, so you can verify exactly
     # how nanobot/obot construct argv for npx-launched servers.
     args:
       - --transport
@@ -44,7 +44,7 @@
   env:
     - key: REFLECT_TEST_VALUE
       name: Reflect Test Value
-      description: Plain test env var — round-tripped via the `echo` tool's `env` field.
+      description: Plain test env var — round-tripped via the `reflect` tool's `env` field.
       required: false
       sensitive: false
     - key: REFLECT_TEST_SECRET
@@ -53,7 +53,7 @@
       required: false
       sensitive: true
   toolPreview:
-    - name: echo
+    - name: reflect
       description: Returns argv, env, cwd, pid, transport, and (for HTTP) request headers.
       params: {}
 
@@ -62,7 +62,7 @@
   description: |
     Reflect MCP server (containerized variant). Runs from the prebuilt image
     `ghcr.io/njhale/mcp-zoo/reflect-mcp:main` and serves the streamable HTTP
-    transport on port 8099 at `/mcp`. The `echo` tool returns:
+    transport on port 8099 at `/mcp`. The `reflect` tool returns:
 
       - the command and args the container was started with
       - the environment variables visible to the process (including k8s
@@ -83,7 +83,7 @@
     port: 8099
     path: /mcp
     # Real flags first, then arbitrary pass-through args that show up in the
-    # `echo` tool's `argv` / `extraArgs` fields — confirms how nanobot/obot
+    # `reflect` tool's `argv` / `extraArgs` fields — confirms how nanobot/obot
     # propagate args for containerized runtimes.
     args:
       - --transport
@@ -97,7 +97,7 @@
   env:
     - key: REFLECT_TEST_VALUE
       name: Reflect Test Value
-      description: Plain test env var — round-tripped via the `echo` tool's `env` field.
+      description: Plain test env var — round-tripped via the `reflect` tool's `env` field.
       required: false
       sensitive: false
     - key: REFLECT_TEST_SECRET
@@ -106,7 +106,7 @@
       required: false
       sensitive: true
   toolPreview:
-    - name: echo
+    - name: reflect
       description: Returns argv, env, cwd, pid, transport, and the inbound HTTP request headers.
       params: {}
 
@@ -116,7 +116,7 @@
     Reflect MCP server (remote variant). Points at the hosted instance at
     `https://reflect.hale.sh/mcp`. Nanobot acts as the proxy and forwards
     each MCP request — synthesizing the configured headers — to the
-    remote URL. The `echo` tool returns:
+    remote URL. The `reflect` tool returns:
 
       - the command and args the remote process was launched with
       - the headers nanobot sent to the remote (so you can confirm that
@@ -139,7 +139,7 @@
         kubectl -n <mcp-namespace> create secret generic reflect-mcp-creds \
           --from-literal=x_reflect_token='hello-from-the-vault'
 
-    After install, call `echo` with the echo key (printed on stderr at
+    After install, call `reflect` with the reflect key (printed on stderr at
     server startup) and check `headers["x-reflect-token"]` in the response —
     you should see `hello-from-the-vault`. If the Secret/key is missing
     when the pod starts, kubelet fails closed with `CreateContainerConfigError`
@@ -167,7 +167,7 @@
         name: Reflect User Header
         description: |
           User-supplied sensitive header. Configure a value at install time
-          and `echo` will return it under `headers["x-reflect-user"]`.
+          and `reflect` will return it under `headers["x-reflect-user"]`.
           Confirms the credential-store / envFrom code path.
         required: false
         sensitive: true
@@ -194,13 +194,13 @@
           the obot MCP deployments namespace. Obot never reads the value —
           it only writes a `valueFrom.secretKeyRef` onto the nanobot proxy
           pod's env, and nanobot substitutes it into this header at request
-          time. Verify in `echo` under `headers["x-reflect-token"]`.
+          time. Verify in `reflect` under `headers["x-reflect-token"]`.
         required: true
         sensitive: true
         secretBinding:
-          name: reflect-mcp-creds   # pre-existing K8s Secret name
-          key: x_reflect_token      # key within that Secret
+          name: reflect-mcp-creds # pre-existing K8s Secret name
+          key: x_reflect_token # key within that Secret
   toolPreview:
-    - name: echo
+    - name: reflect
       description: Returns argv, env, cwd, pid, transport, and the inbound HTTP request headers.
       params: {}
